@@ -210,6 +210,16 @@ yours alone.
 `apps_connect` works the same in both modes. In `all` mode any slug is accepted.
 `apps_list` shows the apps that hold a live connection.
 
+## Choosing the mode: COMPOSIO_MODE
+
+`COMPOSIO_MODE=router` opens the session in router mode even for a short toolkit
+list. The reason to do that is the model: OpenAI-compatible endpoints, including
+the Maritime LLM proxy behind `INSTINCT_USE_MARITIME_LLM=1`, refuse a request with
+more than 128 tools, and Gmail plus Google Calendar in direct mode is 109 app
+tools on top of the agent's own. With direct mode there, every reply fails with
+`Invalid 'tools': array too long`. Router mode is six tools. The default stays
+`direct`; `all` is router mode regardless.
+
 ## Limits
 
 | Limit | Detail |

@@ -236,7 +236,12 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   let appsConnected: string[] | undefined;
   if (env.COMPOSIO_API_KEY) {
     const toolkits = config.apps.toolkits.length > 0 ? config.apps.toolkits : DEFAULT_TOOLKITS;
-    const composio = new ComposioApps({ apiKey: env.COMPOSIO_API_KEY, userId: externalUserId, toolkits, state, logger: log });
+    // direct: one tool per app action (the policy guard sees GMAIL_SEND_EMAIL). router: Composio's
+    // six meta tools that search and run actions. Router keeps the tool list small: OpenAI-compatible
+    // proxies such as the Maritime LLM refuse more than 128 tools, and Gmail plus Calendar alone are
+    // over a hundred, so direct mode there fails every reply with "array too long".
+    const composioMode = env.COMPOSIO_MODE?.trim().toLowerCase() === "router" ? "router" : "direct";
+    const composio = new ComposioApps({ apiKey: env.COMPOSIO_API_KEY, userId: externalUserId, toolkits, mode: composioMode, state, logger: log });
     const connected = await safely(log, "apps", async () => {
       await composio.connect();
       const tools = await composio.tools();
