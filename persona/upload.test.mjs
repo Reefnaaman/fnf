@@ -91,3 +91,19 @@ test("an API error surfaces the status and body", async () => {
   const client = makeClient({ base: "https://x.test/api", key: "k", fetchImpl });
   await assert.rejects(client.request("GET", "/projects"), /401.*nope/);
 });
+
+test("extractSaid collects chat_say texts from actions.requested events and reports when the turn is over", async () => {
+  const { extractSaid } = await import("./upload.mjs");
+  const events = [
+    { type: "message.received", data: { message: "hi" } },
+    { type: "action.input.appended", data: { toolName: "chat_say", inputTextDelta: "{\"text\": \"par" } },
+    { type: "actions.requested", data: { actions: [{ kind: "load-skill", name: "fnf-onboarding" }] } },
+    { type: "actions.requested", data: { actions: [{ kind: "tool-call", toolName: "chat_say", input: { text: "היי, אני F&F." } }] } },
+    { type: "action.result", data: { result: { toolName: "chat_say", output: { sent: true } } } },
+    { type: "step.finished", data: { finishReason: "stop" } },
+  ];
+  const out = extractSaid(events);
+  assert.deepEqual(out.said, ["היי, אני F&F."]);
+  assert.equal(out.done, true);
+  assert.equal(extractSaid(events.slice(0, 4)).done, false);
+});

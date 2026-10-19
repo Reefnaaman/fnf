@@ -119,7 +119,25 @@ export async function syncProfile(client, { dir, projectName, personaName, model
   return { projectId: project.id, personaId: persona.id, ...result };
 }
 
-/** One message through the agent API; prints what the persona says. */
+/**
+ * What the persona said, from eve stream events: every chat_say tool call, and whether the
+ * turn finished (a step that ended with finishReason "stop", or a turn.* completion event).
+ */
+export function extractSaid(events) {
+  const said = [];
+  let done = false;
+  for (const ev of events) {
+    const type = ev?.type ?? "";
+    if (type === "actions.requested") {
+      for (const a of ev.data?.actions ?? []) if (a.toolName === "chat_say" && a.input?.text) said.push(a.input.text);
+    }
+    if (type === "step.finished" && ev.data?.finishReason === "stop") done = true;
+    if (/^turn\.(completed|finished|ended)$/.test(type)) done = true;
+  }
+  return { said, done };
+}
+
+/** One message through the agent API; returns what the persona said in that turn. */
 export async function smokeChat(client, personaId, message, { fetchImpl = globalThis.fetch, timeoutMs = 120_000 } = {}) {
   const { token } = await client.request("POST", `/personas/${personaId}/agent-token`);
   const eve = client.root.replace(/\/api$/, "") + "/eve/v1";
@@ -127,19 +145,27 @@ export async function smokeChat(client, personaId, message, { fetchImpl = global
   const started = await fetchImpl(`${eve}/session`, { method: "POST", headers, body: JSON.stringify({ message }) });
   if (!started.ok) throw new Error(`eve session -> HTTP ${started.status}: ${(await started.text()).slice(0, 300)}`);
   const { sessionId } = await started.json();
-  const res = await fetchImpl(`${eve}/session/${sessionId}/stream`, { headers, signal: AbortSignal.timeout(timeoutMs) });
-  const said = [];
-  for await (const chunk of res.body) {
-    for (const line of Buffer.from(chunk).toString("utf8").split("\n")) {
-      if (!line.trim()) continue;
-      let ev;
-      try { ev = JSON.parse(line); } catch { continue; }
-      const text = ev?.action?.name === "chat_say" ? ev.action?.input?.text ?? ev.action?.args?.text : ev?.type === "chat_say" ? ev.text : undefined;
-      if (text) said.push(text);
-      if (ev?.type === "done" || ev?.status === "done" || ev?.status === "completed") break;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const res = await fetchImpl(`${eve}/session/${sessionId}/stream`, { headers, signal: controller.signal });
+  const events = [];
+  let out = { said: [], done: false };
+  try {
+    for await (const chunk of res.body) {
+      for (const line of Buffer.from(chunk).toString("utf8").split("\n")) {
+        if (!line.trim()) continue;
+        try { events.push(JSON.parse(line)); } catch { continue; }
+      }
+      out = extractSaid(events);
+      if (out.done) break;
     }
+  } catch (err) {
+    if (err?.name !== "AbortError") throw err;
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
   }
-  return { sessionId, said };
+  return { sessionId, said: out.said, done: out.done };
 }
 
 function arg(name) {
