@@ -21,8 +21,10 @@ PERSONA_API_KEY=persona_sk_... node upload.mjs --model anthropic/claude-fable-5-
 ```
 
 The key is read from the environment only. `PERSONA_API_BASE` defaults to
-`https://persona-goldy.vercel.app/api`. Run it again after editing any file: rows are
-matched by name and updated in place. Add `--chat "היי"` to send one message through the
+`https://persona-goldy.vercel.app/api`. It updates the persona named `F&F template` in the
+`F&F` project; pass `--persona` and `--project` to target another one. The persona is found
+by name, so after renaming it in Persona, rename it here too, or the upload makes a new one.
+Run it again after editing any file: rows are matched by name and updated in place. Add `--chat "היי"` to send one message through the
 agent API and print what F&F said.
 
 Pick the model from `GET /api/models` (any tool-capable gateway id). The persona's default

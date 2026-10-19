@@ -4,7 +4,7 @@
  * instructions (one per instructions/*.md, named after the file) and skills (one per
  * skills/<name>/SKILL.md). Idempotent: existing rows are updated in place by name.
  *
- *   PERSONA_API_KEY=persona_sk_... node upload.mjs [--project "F&F"] [--persona "F&F"] [--model <gateway id>] [--chat "hi"]
+ *   PERSONA_API_KEY=persona_sk_... node upload.mjs [--project "F&F"] [--persona "F&F template"] [--model <gateway id>] [--chat "hi"]
  *
  * PERSONA_API_BASE defaults to https://persona-goldy.vercel.app/api. The key is read from the
  * environment only and never written anywhere.
@@ -14,6 +14,8 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const DEFAULT_BASE = "https://persona-goldy.vercel.app/api";
+export const DEFAULT_PROJECT = "F&F";
+export const DEFAULT_PERSONA = "F&F template";
 
 export function makeClient({ base = DEFAULT_BASE, key, fetchImpl = globalThis.fetch }) {
   if (!key) throw new Error("PERSONA_API_KEY is required");
@@ -70,9 +72,12 @@ export async function syncProfile(client, { dir, projectName, personaName, model
     const made = await client.request("POST", "/projects", { name: projectName });
     project = made.project;
     result.created.push(`project:${projectName}`);
-    // A new project comes with a first persona named after it.
-    if (made.persona && made.persona.name === personaName) {
-      persona = made.persona;
+    // A new project comes with a first persona named after the project. Use it as this
+    // persona, renamed when the names differ, so no stray persona is left behind.
+    if (made.persona) {
+      persona = made.persona.name === personaName
+        ? made.persona
+        : await client.request("PATCH", `/personas/${made.persona.id}`, { name: personaName });
       result.created.push(`persona:${personaName}`);
     }
   }
@@ -179,7 +184,7 @@ function arg(name) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const client = makeClient({ base: process.env.PERSONA_API_BASE ?? DEFAULT_BASE, key: process.env.PERSONA_API_KEY });
   const dir = fileURLToPath(new URL(".", import.meta.url));
-  const out = await syncProfile(client, { dir, projectName: arg("--project") ?? "F&F", personaName: arg("--persona") ?? "F&F", model: arg("--model") });
+  const out = await syncProfile(client, { dir, projectName: arg("--project") ?? DEFAULT_PROJECT, personaName: arg("--persona") ?? DEFAULT_PERSONA, model: arg("--model") });
   console.log(JSON.stringify(out, null, 2));
   const msg = arg("--chat");
   if (msg) {

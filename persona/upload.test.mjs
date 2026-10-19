@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseSkill, syncProfile, makeClient } from "./upload.mjs";
+import { parseSkill, syncProfile, makeClient, DEFAULT_PROJECT, DEFAULT_PERSONA } from "./upload.mjs";
 
 function fixtureDir() {
   const dir = mkdtempSync(join(tmpdir(), "fnf-profile-"));
@@ -84,6 +84,17 @@ test("first sync creates the project, persona, instructions and skills; second s
   assert.deepEqual(second.updated, ["instruction:soul"]);
   assert.deepEqual(second.unchanged.sort(), ["instruction:chat_format", "skill:fnf-onboarding"]);
   assert.equal(state.instructions.find((i) => i.name === "soul").content, "# Who you are\nYou are F&F, v2.\n");
+});
+
+test("a new project's first persona is renamed to the persona name, not left behind as a stray", async () => {
+  const dir = fixtureDir();
+  const { state, fetchImpl } = fakeApi();
+  const client = makeClient({ base: "https://persona-goldy.vercel.app/api", key: "persona_sk_test", fetchImpl });
+  const out = await syncProfile(client, { dir, projectName: DEFAULT_PROJECT, personaName: DEFAULT_PERSONA });
+  assert.equal(state.personas.length, 1, "no extra persona named after the project");
+  assert.equal(state.personas[0].name, "F&F template");
+  assert.equal(out.personaId, state.personas[0].id);
+  assert.ok(out.created.includes("persona:F&F template"));
 });
 
 test("an API error surfaces the status and body", async () => {
