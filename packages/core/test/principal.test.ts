@@ -156,3 +156,19 @@ describe("resolvePrincipal caps on unauthenticated channels", () => {
     }
   });
 });
+
+describe("whatsapp channel", () => {
+  it("whatsapp from the owner's phone is the owner", () => {
+    const config = testConfig({ phones: ["+972501234567"] });
+    const c = new ContactStore(tempState());
+    const p = resolvePrincipal(inbound({ channel: "whatsapp", from: "+972501234567" }), config, c);
+    expect(p).toMatchObject({ kind: "owner", tier: "owner" });
+  });
+
+  it("whatsapp from an unknown number is a stranger", () => {
+    const config = testConfig({ phones: ["+972501234567"] });
+    const c = new ContactStore(tempState());
+    const p = resolvePrincipal(inbound({ channel: "whatsapp", from: "+972509999999" }), config, c);
+    expect(p).toMatchObject({ kind: "stranger", id: "stranger:whatsapp:+972509999999" });
+  });
+});

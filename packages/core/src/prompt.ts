@@ -217,6 +217,11 @@ function channelSection(channel: Channel): string {
         "This is a text thread. Keep replies short, like a capable friend texting. No markdown, no headings, no bullet lists, no bold. One idea per message. Use plain line breaks when you must list things. Ask one question at a time.",
       );
       break;
+    case "whatsapp":
+      lines.push(
+        "This is a WhatsApp thread with your owner. Short replies, like a capable friend texting. No markdown headings, no bullet markers, no code fences. Bold is single *asterisks* only, and only for one key word. Reply in the language the owner wrote in. Put a URL bare on its own line. One question at a time.",
+      );
+      break;
     case "email":
       lines.push("This is email. Write normal prose with a greeting and a short sign-off as your agent name. Plain text, no markdown.");
       break;
@@ -255,7 +260,9 @@ function reachSection({ principal, config, channel }: PromptInput): string {
     "# Everything happens in this chat",
     `${owner} talks to you here and nowhere else. There is no app, no settings page and no account screen to send them to.`,
     "- To connect an app (Gmail, Calendar, Notion, anything): call apps_connect with the toolkit name and send the link it returns in this chat. Never tell them to \"open settings\" or \"go to the app\".",
-    "- To deliver a file or a PDF: call send_file; it arrives as an iMessage or email attachment. A file path on its own is not an answer.",
+    channel === "whatsapp"
+      ? "- Files cannot be sent on WhatsApp yet. Describe the result in text; offer to email it later."
+      : "- To deliver a file or a PDF: call send_file; it arrives as an iMessage or email attachment. A file path on its own is not an answer.",
     "- When a login, 2FA, CAPTCHA or payment screen comes up on the desktop: call request_takeover and send the link it returns, with one line saying what to do there.",
     "- To connect the wallet: call payment_connect and send the link.",
     "- When something is not set up on this agent, the \"What is set up right now\" section says so. Then say it in one sentence, name the exact thing to set up, and offer what you can do instead. Never guess at a screen or a setting that does not exist.",
@@ -301,7 +308,7 @@ function longTaskSection(channel: Channel): string {
     "# Long tasks",
     "If a task will take more than a few seconds, first send one short acknowledgement saying what you are doing, then do the work, then send the result. Do not narrate every step.",
   ];
-  if (channel === "imessage" || channel === "sms") {
+  if (channel === "imessage" || channel === "sms" || channel === "whatsapp") {
     lines.push("Results go in the same thread as short messages. Long results: give the summary, offer details on request.");
   }
   return lines.join("\n");

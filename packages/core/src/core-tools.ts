@@ -24,6 +24,8 @@ export interface CoreToolDeps {
   audit: AuditLog;
   config: InstinctConfig;
   outbox: Outbox;
+  /** Channel used to reach the owner by phone for ask_owner and notify_owner. Default imessage. */
+  ownerPhoneChannel?: "imessage" | "whatsapp";
   fetchImpl?: typeof fetch;
   /** DNS lookup used to vet web_fetch targets; tests inject a stub. */
   lookup?: Lookup;
@@ -179,14 +181,15 @@ function scheduleTools({ scheduler, config }: CoreToolDeps): RegisteredTool[] {
 // Owner relay
 // ---------------------------------------------------------------------------
 
-function ownerTools({ approvals, config, outbox, audit, onApprovalSettled }: CoreToolDeps): RegisteredTool[] {
+function ownerTools({ approvals, config, outbox, audit, onApprovalSettled, ownerPhoneChannel }: CoreToolDeps): RegisteredTool[] {
   const ownerPhone = () => config.owner.phones[0];
+  const channel = ownerPhoneChannel ?? "imessage";
 
   const sendOwner = async (text: string, ctx: ToolContext): Promise<boolean> => {
     const phone = ownerPhone();
     if (!phone) return false;
-    await outbox.send({ channel: "imessage", to: phone, text }, { principal: ctx.principal, conversationKey: ctx.conversationKey });
-    audit.append({ kind: "outbound", conversationKey: ctx.conversationKey, principal: ctx.principal.id, detail: { channel: "imessage", to: phone, chars: text.length, via: "owner_relay" } });
+    await outbox.send({ channel, to: phone, text }, { principal: ctx.principal, conversationKey: ctx.conversationKey });
+    audit.append({ kind: "outbound", conversationKey: ctx.conversationKey, principal: ctx.principal.id, detail: { channel, to: phone, chars: text.length, via: "owner_relay" } });
     return true;
   };
 

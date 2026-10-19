@@ -1679,3 +1679,33 @@ describe("runSystemTask", () => {
     expect(h.sent).toHaveLength(0);
   });
 });
+
+describe("whatsapp channel", () => {
+  it("sendToOwner uses the configured owner channel when there is no prior thread", async () => {
+    const h = harness({ deps: { ownerPhoneChannel: "whatsapp" } });
+    expect(await h.runtime.relayToOwner("hi", "system")).toBe(true);
+    expect(h.sent[0]!.msg).toMatchObject({ channel: "whatsapp", to: OWNER_PHONE, text: "hi" });
+  });
+
+  it("a scheduled result goes to the owner's last whatsapp thread", async () => {
+    const h = harness({ deps: { ownerPhoneChannel: "whatsapp" } });
+    h.faux.setResponses([textTurn("Hello."), textTurn("Scheduled update.")]);
+    const r = await h.runtime.handleInbound(inbound({ channel: "whatsapp", from: OWNER_PHONE, conversationKey: "whatsapp:owner@c.us" }));
+    expect(r.reply).toBe("Hello.");
+    expect(h.sent[0]!.msg).toMatchObject({ channel: "whatsapp", conversationKey: "whatsapp:owner@c.us", text: "Hello." });
+    await h.runtime.runScheduled({ id: "brief", enabled: true, prompt: "update", createdAt: new Date().toISOString() });
+    expect(h.sent.at(-1)!.msg).toMatchObject({ channel: "whatsapp", conversationKey: "whatsapp:owner@c.us", text: "Scheduled update." });
+  });
+
+  it("an owner yes on whatsapp settles a pending approval", async () => {
+    const h = harness({ deps: { ownerPhoneChannel: "whatsapp" } });
+    h.deps.contacts.upsert({ name: "Sam Lee", tier: "partner", phones: [SAM_PHONE] });
+    h.faux.setResponses([toolTurn("calendar_add", { title: "Dinner" }), textTurn("Let me check with Maria.")]);
+    await h.runtime.handleInbound(inbound({ channel: "imessage", from: SAM_PHONE, conversationKey: "imessage:sam", text: "put dinner on her calendar" }));
+    expect(h.deps.approvals.pending()).toHaveLength(1);
+    h.faux.setResponses([toolTurn("calendar_add", { title: "Dinner" }), textTurn("Booked.")]);
+    const owner = await h.runtime.handleInbound(inbound({ channel: "whatsapp", from: OWNER_PHONE, conversationKey: "whatsapp:owner@c.us", text: "yes" }));
+    expect(owner.reply).toMatch(/^Approved: /);
+    expect(h.deps.approvals.pending()).toHaveLength(0);
+  });
+});

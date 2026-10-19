@@ -24,7 +24,7 @@ const stubLookup = async (host: string): Promise<string[]> => {
   return ["93.184.216.34"];
 };
 
-function setup(opts: { fetchImpl?: typeof fetch; searchApiKey?: string; lookup?: (host: string) => Promise<string[]>; onApprovalSettled?: CoreToolDeps["onApprovalSettled"]; images?: CoreToolDeps["images"]; workspaceDir?: string } = {}) {
+function setup(opts: { ownerPhoneChannel?: CoreToolDeps["ownerPhoneChannel"]; fetchImpl?: typeof fetch; searchApiKey?: string; lookup?: (host: string) => Promise<string[]>; onApprovalSettled?: CoreToolDeps["onApprovalSettled"]; images?: CoreToolDeps["images"]; workspaceDir?: string } = {}) {
   const state = tempState();
   const sent: Array<{ msg: OutboundMessage; principal: Principal }> = [];
   const outbox: Outbox = { send: async (msg, ctx) => void sent.push({ msg, principal: ctx.principal }) };
@@ -213,6 +213,15 @@ describe("owner relay tools", () => {
     await run("notify_owner", { text: "Reminder set" });
     expect(sent[0]!.msg.text).toBe("Alex via Instinct: Running late");
     expect(sent[1]!.msg.text).toBe("Reminder set");
+  });
+
+  it("notify_owner and ask_owner reach the owner on the configured owner channel", async () => {
+    const { run, sent, deps } = setup({ ownerPhoneChannel: "whatsapp" });
+    await run("notify_owner", { text: "Reminder set" });
+    await run("ask_owner", { question: "Book it?", summary: "Book it" }, principalOf("friend", { displayName: "Alex" }));
+    expect(sent.map((s) => s.msg.channel)).toEqual(["whatsapp", "whatsapp"]);
+    expect(sent[0]!.msg.to).toBe(deps.config.owner.phones[0]);
+    expect(deps.audit.read({ kinds: ["outbound"] }).map((e) => e.detail.channel)).toEqual(["whatsapp", "whatsapp"]);
   });
 
   it("explains when the owner has no phone on file", async () => {

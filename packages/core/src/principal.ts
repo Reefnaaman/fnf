@@ -68,7 +68,7 @@ export function capTier(p: Principal, max: Tier): Principal {
 }
 
 /** Channels where a message from the owner's address really is the owner. */
-export const OWNER_VERIFIED_CHANNELS: ReadonlySet<InboundMessage["channel"]> = new Set(["imessage", "sms", "chat", "scheduled", "system"]);
+export const OWNER_VERIFIED_CHANNELS: ReadonlySet<InboundMessage["channel"]> = new Set(["imessage", "sms", "whatsapp", "chat", "scheduled", "system"]);
 
 /** Handles that must never be registered or honoured as an agent handle. */
 export const RESERVED_HANDLES: ReadonlySet<string> = new Set(["owner"]);

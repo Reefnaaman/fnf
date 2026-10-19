@@ -168,3 +168,13 @@ describe("staff principal card", () => {
     expect(p).toContain("still need your owner's yes");
   });
 });
+
+describe("whatsapp channel section", () => {
+  it("bans markdown headings, names single-asterisk bold and says files cannot be sent", () => {
+    const p = buildSystemPrompt(input({ channel: "whatsapp" }));
+    expect(p).toContain("# Channel: whatsapp");
+    expect(p).toMatch(/single \*asterisks\*/);
+    expect(p).toContain("Files cannot be sent on WhatsApp yet");
+    expect(p).not.toContain("it arrives as an iMessage or email attachment");
+  });
+});
