@@ -10,3 +10,6 @@ dist/
 .DS_Store
 coverage/
 .pnpm-store/
+
+# F&F: own WhatsApp daemon copy (separate repo, never committed here)
+daemon/
