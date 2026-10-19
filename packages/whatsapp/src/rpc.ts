@@ -38,9 +38,19 @@ export class DaemonRpc {
         { socketPath: this.socketPath, path: "/rpc", method: "POST", headers: { "content-type": "application/json", "content-length": Buffer.byteLength(data) } },
         (res) => {
           let body = "";
+          let settled = false;
+          const down = (why: string) => {
+            if (settled) return;
+            settled = true;
+            reject(new DaemonError(`daemon connection lost mid-response: ${why}`, "DAEMON_DOWN"));
+          };
+          res.on("error", (err: Error) => down(err.message));
+          res.on("aborted", () => down("aborted"));
           res.setEncoding("utf8");
           res.on("data", (c: string) => { body += c; });
           res.on("end", () => {
+            if (settled) return;
+            settled = true;
             let parsed: { ok?: boolean; data?: T; error?: string; code?: string };
             try {
               parsed = JSON.parse(body) as typeof parsed;

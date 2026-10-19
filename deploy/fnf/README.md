@@ -11,10 +11,13 @@ whatsapp-connector logged into F&F's own number) and the agent
 2. `bash deploy/fnf/setup.sh` writes `.env`, seeds the persona, renders the launchd plists.
 3. Fill in `.env`: `ANTHROPIC_API_KEY`, `INSTINCT_OWNER_PHONE` (your personal number, +972...), optionally `OPENAI_API_KEY` for voice notes and `COMPOSIO_API_KEY` for Gmail and Calendar.
 4. `bash deploy/fnf/fnfctl.sh daemon-login`, then on the phone that holds F&F's WhatsApp account: Settings, Linked Devices, Link a device, scan the QR in the terminal. Wait for `ready`, press Ctrl-C.
-5. From your own phone, text F&F's number once ("hi").
-6. `bash deploy/fnf/fnfctl.sh owner-chat "Reef"` (your name as WhatsApp shows it). A native dialog asks to allow sends to that one chat: Approve. The chat id is written to `.env`.
-7. `bash deploy/fnf/fnfctl.sh start`, then `bash deploy/fnf/fnfctl.sh status`. Both services show `state = running`, the daemon shows `"ready": true`, and the agent's `/status` shows `whatsapp.ownerChat`.
-8. Text F&F again. The first conversation runs the `fnf-onboarding` skill.
+5. `bash deploy/fnf/fnfctl.sh daemon-start` loads the daemon as a service and waits until it reports ready.
+6. From your own phone, text F&F's number once ("hi").
+7. `bash deploy/fnf/fnfctl.sh owner-chat "Reef"` (your name as WhatsApp shows it). A native dialog asks to allow sends to that one chat: Approve. The chat id is written to `.env`.
+8. `bash deploy/fnf/fnfctl.sh start`, then `bash deploy/fnf/fnfctl.sh status`. Both services show `state = running`, the daemon shows `"ready": true`, and the agent's `/status` shows `whatsapp.ownerChat`.
+9. Text F&F again. The first conversation runs the `fnf-onboarding` skill.
+
+Values in `.env` that contain `$`, backticks or `&` must be double-quoted: the service sources the file with `/bin/sh`.
 
 ## Day to day
 

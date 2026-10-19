@@ -93,3 +93,30 @@ describe("WhatsApp wiring in boot", () => {
     expect(statusJson(app).whatsapp).toBeUndefined();
   });
 });
+
+describe("WhatsApp review fixes", () => {
+  it("texts queued while the daemon was away are delivered once a poll finds it back, without a restart", async () => {
+    const d = await daemon();
+    d.ready = false;
+    const { app, faux, logs } = await bootWith({ FNF_WHATSAPP_SOCKET: d.socketPath, FNF_WHATSAPP_OWNER_CHAT: OWNER_CHAT });
+    faux.setResponses([fauxAssistantMessage("Morning brief while the daemon was down.")]);
+    const entry = app.scheduler.create({ name: "brief", prompt: "Run the daily brief", enabled: true, nextRunAt: new Date(Date.now() + 60_000).toISOString() });
+    await app.runtime.runScheduled(entry);
+    expect(d.sent).toEqual([]);
+    expect(statusJson(app)).toMatchObject({ whatsapp: { queued: 1 } });
+    expect(await app.whatsapp!.inbox.pollOnce()).toBe(0);
+    expect(d.sent).toEqual([]);
+    d.ready = true;
+    await app.whatsapp!.inbox.pollOnce();
+    expect(d.sent).toEqual([{ chatId: OWNER_CHAT, text: "(delayed) Morning brief while the daemon was down." }]);
+    expect(statusJson(app)).toMatchObject({ whatsapp: { queued: 0 } });
+    expect(logs.some((l) => /flushed 1 queued/.test(l))).toBe(true);
+  });
+
+  it("a group or a name as the owner chat disables WhatsApp with a clear line", async () => {
+    const d = await daemon();
+    const { app, logs } = await bootWith({ FNF_WHATSAPP_SOCKET: d.socketPath, FNF_WHATSAPP_OWNER_CHAT: "120363000000000000@g.us" });
+    expect(app.whatsapp).toBeUndefined();
+    expect(logs.some((l) => l.includes("not a 1:1 chat id") && l.includes("WhatsApp disabled"))).toBe(true);
+  });
+});

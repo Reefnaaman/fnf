@@ -128,3 +128,63 @@ describe("WhatsAppInbox.pollOnce", () => {
     expect(logs.filter((l) => /daemon back/.test(l))).toHaveLength(1);
   });
 });
+
+describe("WhatsAppInbox hardening", () => {
+  it("rejects a batch the daemon resolved to a different chat than the pinned owner id", async () => {
+    const { d, inbox, received, logs } = await setup();
+    d.chats.length = 0;
+    d.chats.push({ id: "15550000000@c.us", name: OWNER_CHAT });
+    d.push("15550000000@c.us", text("m1", "Mallory", "I am the owner now", nowSec() + 1));
+    expect(await inbox.pollOnce()).toBe(0);
+    expect(received).toEqual([]);
+    expect(logs.some((l) => /resolved to .* not the owner chat/.test(l))).toBe(true);
+    expect(inbox.delayMs).toBe(4000);
+  });
+
+  it("a message whose media cannot be processed is still marked and delivered as text", async () => {
+    const { d, inbox, received } = await setup();
+    d.push(OWNER_CHAT, { id: "bad1", sender: "Reef", ts: nowSec() + 1, text: "", hasMedia: true, media: { mimetype: "" } });
+    d.push(OWNER_CHAT, text("m2", "Reef", "after it", nowSec() + 2));
+    expect(await inbox.pollOnce()).toBe(2);
+    expect(received.map((m) => m.text)).toEqual(["[attachment, could not be processed]", "after it"]);
+    expect(await inbox.pollOnce()).toBe(0);
+  });
+
+  it("an empty text without media is skipped, then marked seen only once it is five minutes old", async () => {
+    const { d, inbox, received } = await setup();
+    d.push(OWNER_CHAT, text("e1", "Reef", "", nowSec() + 1));
+    expect(await inbox.pollOnce()).toBe(0);
+    expect(received).toEqual([]);
+    d.messagesFor(OWNER_CHAT)[0]!.text = "now decrypted";
+    expect(await inbox.pollOnce()).toBe(1);
+    expect(received[0]!.text).toBe("now decrypted");
+    d.push(OWNER_CHAT, text("e2", "Reef", "", nowSec() - 400));
+    expect(await inbox.pollOnce()).toBe(0);
+    d.messagesFor(OWNER_CHAT)[1]!.text = "too late";
+    expect(await inbox.pollOnce()).toBe(0);
+  });
+
+  it("runs the afterPoll hook after every successful read, never during an outage", async () => {
+    let calls = 0;
+    const d = await startFakeDaemon({ ready: false }); daemons.push(d);
+    d.chats.push({ id: OWNER_CHAT, name: "Reef" });
+    const dir = mkdtempSync(join(tmpdir(), "wai-"));
+    const inbox = new WhatsAppInbox({ rpc: new DaemonRpc({ socketPath: d.socketPath }), ownerChatId: OWNER_CHAT, ownerPhone: OWNER_PHONE, cursorFile: join(dir, "c.json"), inboundDir: join(dir, "in"), onMessage: async () => {}, afterPoll: async () => { calls += 1; } });
+    await inbox.pollOnce();
+    expect(calls).toBe(0);
+    d.ready = true;
+    await inbox.pollOnce();
+    await inbox.pollOnce();
+    expect(calls).toBe(2);
+  });
+});
+
+describe("whatsappSettings", () => {
+  it("accepts only a real 1:1 chat id as the owner chat", async () => {
+    const { whatsappSettings } = await import("../src/index.js");
+    expect(whatsappSettings({ FNF_WHATSAPP_SOCKET: "/tmp/s", FNF_WHATSAPP_OWNER_CHAT: "972501234567@c.us" })).toEqual({ socketPath: "/tmp/s", ownerChatId: "972501234567@c.us" });
+    expect(whatsappSettings({ FNF_WHATSAPP_SOCKET: "/tmp/s", FNF_WHATSAPP_OWNER_CHAT: "123456789@lid" })).toEqual({ socketPath: "/tmp/s", ownerChatId: "123456789@lid" });
+    expect(whatsappSettings({ FNF_WHATSAPP_SOCKET: "/tmp/s", FNF_WHATSAPP_OWNER_CHAT: "120363@g.us" })).toEqual({ socketPath: "/tmp/s", ownerChatInvalid: "120363@g.us" });
+    expect(whatsappSettings({ FNF_WHATSAPP_SOCKET: "/tmp/s", FNF_WHATSAPP_OWNER_CHAT: "Reef" })).toEqual({ socketPath: "/tmp/s", ownerChatInvalid: "Reef" });
+  });
+});

@@ -31,6 +31,8 @@ export interface WhatsAppInboxOptions {
   /** How many recent messages to read per poll. Default 50. */
   readLimit?: number;
   transcribe?: (path: string, mimetype: string) => Promise<string>;
+  /** Runs after every successful read (daemon reachable), for example to flush queued texts. */
+  afterPoll?: () => Promise<unknown>;
   now?: () => Date;
 }
 
@@ -38,6 +40,8 @@ export const DEFAULT_POLL_MS = 2000;
 export const MAX_POLL_MS = 30_000;
 /** Messages this many seconds before the high-water mark are still considered new (clock skew, late sync). */
 export const GRACE_SECONDS = 60;
+/** An empty text with no media (deleted, or not yet decrypted) is left alone this long before it is written off. */
+export const EMPTY_TEXT_GRACE_SECONDS = 300;
 const DEFAULT_READ_LIMIT = 50;
 const TRANSIENT_CODES: ReadonlySet<string> = new Set(["DAEMON_DOWN", "NOT_READY"]);
 
@@ -52,6 +56,7 @@ export class WhatsAppInbox {
   private readonly pollMs: number;
   private readonly readLimit: number;
   private readonly transcribe: WhatsAppInboxOptions["transcribe"];
+  private readonly afterPoll: WhatsAppInboxOptions["afterPoll"];
   private readonly now: () => Date;
   private readonly cursor: Cursor;
   private failures = 0;
@@ -70,6 +75,7 @@ export class WhatsAppInbox {
     this.pollMs = opts.pollMs ?? DEFAULT_POLL_MS;
     this.readLimit = opts.readLimit ?? DEFAULT_READ_LIMIT;
     this.transcribe = opts.transcribe;
+    this.afterPoll = opts.afterPoll;
     this.now = opts.now ?? (() => new Date());
     this.cursor = new Cursor(this.cursorFile);
     this.cursor.initIfEmpty(Math.floor(this.now().getTime() / 1000));
@@ -103,9 +109,9 @@ export class WhatsAppInbox {
 
   /** Read the owner's chat once. Returns how many new messages were handed to the runtime. */
   async pollOnce(): Promise<number> {
-    let batch: { messages: DaemonMessage[] };
+    let batch: { id?: string; messages: DaemonMessage[] };
     try {
-      batch = await this.rpc.call<{ messages: DaemonMessage[] }>("read", { chat: this.ownerChatId, limit: this.readLimit });
+      batch = await this.rpc.call<{ id?: string; messages: DaemonMessage[] }>("read", { chat: this.ownerChatId, limit: this.readLimit });
     } catch (err) {
       if (err instanceof DaemonError && TRANSIENT_CODES.has(err.code)) {
         this.failures += 1;
@@ -117,6 +123,15 @@ export class WhatsAppInbox {
       }
       throw err;
     }
+    // The daemon resolves a chat by id, then by name. Anything but the pinned id is not the owner.
+    if (batch.id !== undefined && batch.id !== this.ownerChatId) {
+      this.failures += 1;
+      if (!this.outage) {
+        this.outage = true;
+        this.log(`whatsapp: daemon resolved to ${batch.id}, not the owner chat ${this.ownerChatId}; reading nothing until it matches`);
+      }
+      return 0;
+    }
     if (this.outage) {
       this.outage = false;
       this.log("whatsapp: daemon back; polling resumed");
@@ -127,9 +142,21 @@ export class WhatsAppInbox {
     const fresh = batch.messages
       .filter((m) => m.sender !== "me" && m.ts >= floor && !this.cursor.seen(m.id))
       .sort((a, b) => a.ts - b.ts);
+    const nowSec = Math.floor(this.now().getTime() / 1000);
     let handled = 0;
     for (const m of fresh) {
-      const inbound = await this.toInbound(m);
+      if (!m.hasMedia && !(m.text ?? "").trim()) {
+        // Deleted for everyone, or not decrypted yet: wait, then write it off.
+        if (nowSec - m.ts > EMPTY_TEXT_GRACE_SECONDS) this.cursor.mark(m.id, m.ts);
+        continue;
+      }
+      let inbound: InboundMessage;
+      try {
+        inbound = await this.toInbound(m);
+      } catch (err) {
+        this.log(`whatsapp: could not process ${m.id}: ${(err as Error).message}`);
+        inbound = { ...this.baseInbound(m), text: (m.text ?? "").trim() || "[attachment, could not be processed]" };
+      }
       try {
         await this.onMessage(inbound);
       } catch (err) {
@@ -139,11 +166,18 @@ export class WhatsAppInbox {
       this.cursor.mark(m.id, m.ts);
       handled += 1;
     }
+    if (this.afterPoll) {
+      try {
+        await this.afterPoll();
+      } catch (err) {
+        this.log(`whatsapp: after-poll hook failed: ${(err as Error).message}`);
+      }
+    }
     return handled;
   }
 
-  private async toInbound(m: DaemonMessage): Promise<InboundMessage> {
-    const base: InboundMessage = {
+  private baseInbound(m: DaemonMessage): InboundMessage {
+    return {
       id: m.id,
       channel: "whatsapp",
       conversationKey: `whatsapp:${this.ownerChatId}`,
@@ -152,15 +186,20 @@ export class WhatsAppInbox {
       replyRef: { chatId: this.ownerChatId, messageId: m.id },
       receivedAt: new Date(m.ts * 1000).toISOString(),
     };
+  }
+
+  private async toInbound(m: DaemonMessage): Promise<InboundMessage> {
+    const base = this.baseInbound(m);
     if (!m.hasMedia) return base;
-    let media: { path: string; mimetype: string };
+    let media: { path: string; mimetype?: string };
     try {
-      media = await this.rpc.call<{ path: string; mimetype: string }>("media", { chat: this.ownerChatId, messageId: m.id });
+      media = await this.rpc.call<{ path: string; mimetype?: string }>("media", { chat: this.ownerChatId, messageId: m.id });
     } catch (err) {
       this.log(`whatsapp: media for ${m.id} unavailable: ${(err as Error).message}`);
       return { ...base, text: base.text || "[attachment, could not be downloaded]" };
     }
-    const path = this.keepMedia(m.id, media);
+    if (!media.mimetype || !media.path) throw new Error("daemon returned media without a path or mimetype");
+    const path = this.keepMedia(m.id, { path: media.path, mimetype: media.mimetype });
     const kind = media.mimetype.split("/")[0];
     let text = base.text;
     if (kind === "audio") {
@@ -177,7 +216,7 @@ export class WhatsAppInbox {
     } else if (!text) {
       text = kind === "image" ? "[photo]" : kind === "video" ? "[video]" : `[document: ${path.split("/").pop() ?? "file"}]`;
     }
-    return { ...base, text, attachments: [{ path, mimeType: media.mimetype }] };
+    return { ...base, text, attachments: [{ path, mimeType: media.mimetype, name: media.path.split("/").pop() ?? "file" }] };
   }
 
   private keepMedia(messageId: string, media: { path: string; mimetype: string }): string {

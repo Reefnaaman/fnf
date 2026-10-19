@@ -52,4 +52,28 @@ ok "setup.sh is idempotent"
 
 bash "$WORK/repo/deploy/fnf/fnfctl.sh" help 2>&1 | grep -q "daemon-login" || fail "fnfctl.sh help does not list daemon-login"
 ok "fnfctl.sh help lists its commands"
+
+
+# owner-chat: with a stub `wa`, it must write the chat id into .env even when the line is missing,
+# and must not claim success when the allow-list dialog was denied.
+STUB="$WORK/stubwa"; mkdir -p "$STUB"
+cat > "$STUB/wa" <<'WA'
+#!/usr/bin/env bash
+case "$1" in
+  status) echo '{"state":"ready","ready":true}' ;;
+  chats) echo '[{"id":"120363000000000000@g.us","name":"Reef family","unread":0},{"id":"972501234567@c.us","name":"Reef","unread":0}]' ;;
+  allow) [ "${WA_DENY:-0}" = "1" ] && { echo "error: allow-list change not approved: denied on screen by the user" >&2; exit 1; } || echo '["972501234567@c.us"]' ;;
+  *) exit 2 ;;
+esac
+WA
+chmod +x "$STUB/wa"
+sed -i '' '/^FNF_WHATSAPP_OWNER_CHAT=/d' "$WORK/repo/.env"
+( cd "$WORK/repo" && FNF_WA_BIN="$STUB/wa" bash deploy/fnf/fnfctl.sh owner-chat Reef > "$WORK/oc.log" 2>&1 ) || { cat "$WORK/oc.log"; fail "owner-chat failed with the stub daemon"; }
+grep -q '^FNF_WHATSAPP_OWNER_CHAT=972501234567@c.us$' "$WORK/repo/.env" || fail "owner-chat did not write the 1:1 chat id into .env"
+ok "owner-chat picks the 1:1 chat, skips the group, and writes .env"
+( cd "$WORK/repo" && WA_DENY=1 FNF_WA_BIN="$STUB/wa" bash deploy/fnf/fnfctl.sh owner-chat Reef > "$WORK/oc2.log" 2>&1 ) && fail "owner-chat claimed success after a denied dialog"
+grep -q "nothing written" "$WORK/oc2.log" || fail "owner-chat did not say the denial left .env untouched"
+ok "owner-chat treats a denied dialog as final"
+grep -q "daemon-start" "$HERE/README.md" || fail "README does not tell the owner to start the daemon before owner-chat"
+ok "runbook starts the daemon before owner-chat"
 echo "all checks passed"

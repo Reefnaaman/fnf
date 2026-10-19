@@ -24,3 +24,12 @@ describe("DaemonRpc", () => {
     await expect(rpc.call("status")).rejects.toMatchObject({ code: "DAEMON_DOWN" });
   });
 });
+
+describe("DaemonRpc response stream", () => {
+  it("a socket closed after the headers is DAEMON_DOWN, not a crash", async () => {
+    const d = await startFakeDaemon(); daemons.push(d);
+    d.abortAfterHeaders = true;
+    const rpc = new DaemonRpc({ socketPath: d.socketPath, timeoutMs: 2000 });
+    await expect(rpc.call("status")).rejects.toMatchObject({ code: "DAEMON_DOWN" });
+  });
+});

@@ -20,6 +20,8 @@ export interface FakeDaemon {
   allow: string[];
   /** Delay every answer by this many ms (timeout tests). */
   delayMs: number;
+  /** Close the socket right after the response headers (M2: res 'error' path). */
+  abortAfterHeaders: boolean;
   messagesFor(chatId: string): FakeMessage[];
   push(chatId: string, msg: FakeMessage): void;
   close(): Promise<void>;
@@ -40,6 +42,7 @@ export async function startFakeDaemon(opts: { ready?: boolean } = {}): Promise<F
     ready: opts.ready ?? true,
     allow: ["*"],
     delayMs: 0,
+    abortAfterHeaders: false,
     messagesFor: (chatId) => messages.get(chatId) ?? [],
     push: (chatId, msg) => { messages.set(chatId, [...(messages.get(chatId) ?? []), msg]); },
     close: () => new Promise((resolve) => server.close(() => resolve())),
@@ -80,10 +83,10 @@ export async function startFakeDaemon(opts: { ready?: boolean } = {}): Promise<F
         const m = (messages.get(chat.id) ?? []).find((x) => x.id === args.messageId);
         if (!m?.media) throw Object.assign(new Error("message has no media"), { code: "NO_MEDIA" });
         const mdir = mkdtempSync(join(tmpdir(), "wa-media-"));
-        const ext = m.media.mimetype.split("/")[1]?.split(";")[0] ?? "bin";
+        const ext = (m.media.mimetype || "application/bin").split("/")[1]?.split(";")[0] ?? "bin";
         const file = join(mdir, m.media.filename ?? `media.${ext}`);
         writeFileSync(file, m.media.bytes ?? Buffer.from("media"));
-        return { path: file, mimetype: m.media.mimetype };
+        return m.media.mimetype === "" ? { path: file } : { path: file, mimetype: m.media.mimetype };
       }
       case "allowList": return d.allow;
       default: throw Object.assign(new Error(`unknown command: ${cmd}`), { code: "UNKNOWN_CMD" });
@@ -103,6 +106,7 @@ export async function startFakeDaemon(opts: { ready?: boolean } = {}): Promise<F
       }
       setTimeout(() => {
         res.writeHead(200, { "content-type": "application/json" });
+        if (d.abortAfterHeaders) { res.flushHeaders(); res.socket?.destroy(); return; }
         res.end(JSON.stringify(out));
       }, d.delayMs);
     });

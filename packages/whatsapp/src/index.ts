@@ -8,13 +8,20 @@ export { transcribeAudio, DEFAULT_TRANSCRIPTION_MODEL, TRANSCRIPTION_URL, type T
 
 export interface WhatsAppSettings {
   socketPath: string;
+  /** A validated 1:1 chat id (`<digits>@c.us` or `<digits>@lid`). */
   ownerChatId?: string;
+  /** Set when FNF_WHATSAPP_OWNER_CHAT is present but is not a 1:1 chat id (a group, a name). */
+  ownerChatInvalid?: string;
 }
+
+/** Only a 1:1 chat binds the sender to a number. Groups (`@g.us`) and names never qualify. */
+export const OWNER_CHAT_ID_PATTERN = /^\d+@(c\.us|lid)$/;
 
 /** FNF_WHATSAPP_SOCKET turns the channel on; FNF_WHATSAPP_OWNER_CHAT names the one chat it may use. */
 export function whatsappSettings(env: NodeJS.ProcessEnv): WhatsAppSettings | undefined {
   const socketPath = env.FNF_WHATSAPP_SOCKET?.trim();
   if (!socketPath) return undefined;
-  const ownerChatId = env.FNF_WHATSAPP_OWNER_CHAT?.trim();
-  return ownerChatId ? { socketPath, ownerChatId } : { socketPath };
+  const raw = env.FNF_WHATSAPP_OWNER_CHAT?.trim();
+  if (!raw) return { socketPath };
+  return OWNER_CHAT_ID_PATTERN.test(raw) ? { socketPath, ownerChatId: raw } : { socketPath, ownerChatInvalid: raw };
 }

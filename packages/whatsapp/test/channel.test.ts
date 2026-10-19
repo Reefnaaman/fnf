@@ -84,3 +84,37 @@ describe("WhatsAppChannel.send", () => {
     await expect(ch.typing(`whatsapp:${OWNER_CHAT}`)).resolves.toBeUndefined();
   });
 });
+
+describe("WhatsAppChannel ordering and flush safety", () => {
+  it("while texts are queued, a new send is queued behind them instead of overtaking", async () => {
+    const { d, ch, queue } = await setup({ ready: false });
+    await ch.send({ channel: "whatsapp", conversationKey: `whatsapp:${OWNER_CHAT}`, text: "first" }, ctx);
+    d.ready = true;
+    await ch.send({ channel: "whatsapp", conversationKey: `whatsapp:${OWNER_CHAT}`, text: "second" }, ctx);
+    expect(d.sent).toEqual([]);
+    expect(queue.size()).toBe(2);
+    expect(await ch.flushQueue()).toBe(2);
+    expect(d.sent.map((s) => s.text)).toEqual(["(delayed) first", "(delayed) second"]);
+  });
+
+  it("a confirm failure mid-flush keeps the remaining entries queued", async () => {
+    const { d, ch, queue } = await setup({ ready: false });
+    await ch.send({ channel: "whatsapp", conversationKey: `whatsapp:${OWNER_CHAT}`, text: "one" }, ctx);
+    await ch.send({ channel: "whatsapp", conversationKey: `whatsapp:${OWNER_CHAT}`, text: "two" }, ctx);
+    d.ready = true;
+    d.failConfirm = true;
+    await expect(ch.flushQueue()).rejects.toMatchObject({ code: "ERR" });
+    expect(queue.size()).toBe(1);
+    d.failConfirm = false;
+    expect(await ch.flushQueue()).toBe(1);
+    expect(d.sent.map((s) => s.text)).toEqual(["(delayed) two"]);
+  });
+
+  it("refuses to confirm when the daemon resolved a different chat than the owner's", async () => {
+    const { d, ch } = await setup();
+    d.chats.length = 0;
+    d.chats.push({ id: "15550000000@c.us", name: OWNER_CHAT }); // a chat whose *name* equals the owner id
+    await expect(ch.send({ channel: "whatsapp", conversationKey: `whatsapp:${OWNER_CHAT}`, text: "x" }, ctx)).rejects.toMatchObject({ code: "WRONG_CHAT" });
+    expect(d.confirms).toBe(0);
+  });
+});

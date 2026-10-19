@@ -151,8 +151,11 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   const waOwnerPhone = config.owner.phones[0];
   let whatsapp: WhatsAppChannel | undefined;
   let waRpc: DaemonRpc | undefined;
+  if (wa && inkbox) log("whatsapp: Inkbox is configured too; Inkbox is the outbox and WhatsApp stays off");
   if (wa && !opts.outbox && !inkbox) {
-    if (wa.ownerChatId && waOwnerPhone) {
+    if (wa.ownerChatInvalid) {
+      log(`whatsapp: FNF_WHATSAPP_OWNER_CHAT=${wa.ownerChatInvalid} is not a 1:1 chat id (<digits>@c.us or <digits>@lid); WhatsApp disabled`);
+    } else if (wa.ownerChatId && waOwnerPhone) {
       waRpc = new DaemonRpc({ socketPath: wa.socketPath });
       whatsapp = new WhatsAppChannel({ rpc: waRpc, ownerChatId: wa.ownerChatId, ownerPhone: waOwnerPhone, queue: new OutboxQueue(state.path("whatsapp-outbox.json")), logger: log });
     } else {
@@ -465,6 +468,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   let whatsappWiring: WhatsAppWiring | undefined;
   if (whatsapp && waRpc && wa?.ownerChatId && waOwnerPhone) {
     const ownerChatId = wa.ownerChatId;
+    const channelForFlush = whatsapp;
     const queue = new OutboxQueue(state.path("whatsapp-outbox.json"));
     const inbox = new WhatsAppInbox({
       rpc: waRpc,
@@ -473,6 +477,11 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
       cursorFile: state.path("whatsapp-cursor.json"),
       inboundDir: state.path("workspace", "inbound"),
       onMessage: (m: InboundMessage) => runtime.handleInbound(m),
+      // Every successful poll proves the daemon is reachable: deliver whatever waited for it.
+      afterPoll: async () => {
+        const n = await channelForFlush.flushQueue();
+        if (n > 0) log(`whatsapp: flushed ${n} queued text(s)`);
+      },
       logger: log,
       ...(env.OPENAI_API_KEY
         ? { transcribe: (path: string, mimetype: string) => transcribeAudio({ path, mimetype, apiKey: env.OPENAI_API_KEY as string, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) }) }
