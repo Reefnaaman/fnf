@@ -6,6 +6,8 @@
  *
  *   PERSONA_API_KEY=persona_sk_... node upload.mjs [--project "F&F"] [--persona "F&F template"] [--model <gateway id>] [--chat "hi"]
  *
+ * Without --model the persona is pinned to google/gemini-4-argon, the model every persona in the F&F project uses.
+ *
  * PERSONA_API_BASE defaults to https://persona-goldy.vercel.app/api. The key is read from the
  * environment only and never written anywhere.
  */
@@ -16,6 +18,14 @@ import { fileURLToPath } from "node:url";
 export const DEFAULT_BASE = "https://persona-goldy.vercel.app/api";
 export const DEFAULT_PROJECT = "F&F";
 export const DEFAULT_PERSONA = "F&F template";
+/** Reef keeps every persona in the F&F project on this model. Pass --model only to deviate on purpose. */
+export const DEFAULT_MODEL = "google/gemini-4-argon";
+
+/** The model the CLI applies: --model when given, else the project default. */
+export function modelArg(argv) {
+  const i = argv.indexOf("--model");
+  return i >= 0 && argv[i + 1] ? argv[i + 1] : DEFAULT_MODEL;
+}
 
 export function makeClient({ base = DEFAULT_BASE, key, fetchImpl = globalThis.fetch }) {
   if (!key) throw new Error("PERSONA_API_KEY is required");
@@ -184,7 +194,7 @@ function arg(name) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const client = makeClient({ base: process.env.PERSONA_API_BASE ?? DEFAULT_BASE, key: process.env.PERSONA_API_KEY });
   const dir = fileURLToPath(new URL(".", import.meta.url));
-  const out = await syncProfile(client, { dir, projectName: arg("--project") ?? DEFAULT_PROJECT, personaName: arg("--persona") ?? DEFAULT_PERSONA, model: arg("--model") });
+  const out = await syncProfile(client, { dir, projectName: arg("--project") ?? DEFAULT_PROJECT, personaName: arg("--persona") ?? DEFAULT_PERSONA, model: modelArg(process.argv.slice(2)) });
   console.log(JSON.stringify(out, null, 2));
   const msg = arg("--chat");
   if (msg) {

@@ -118,3 +118,10 @@ test("extractSaid collects chat_say texts from actions.requested events and repo
   assert.equal(out.done, true);
   assert.equal(extractSaid(events.slice(0, 4)).done, false);
 });
+
+test("the default model for every F&F persona is Gemini 4 Argon, and the CLI applies it when --model is absent", async () => {
+  const { DEFAULT_MODEL, modelArg } = await import("./upload.mjs");
+  assert.equal(DEFAULT_MODEL, "google/gemini-4-argon");
+  assert.equal(modelArg([]), "google/gemini-4-argon");
+  assert.equal(modelArg(["--model", "anthropic/claude-fable-5.1"]), "anthropic/claude-fable-5.1");
+});

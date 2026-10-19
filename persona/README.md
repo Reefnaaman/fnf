@@ -17,7 +17,7 @@ upload.test.mjs               node --test upload.test.mjs
 
 ```bash
 cd ~/F&F/persona
-PERSONA_API_KEY=persona_sk_... node upload.mjs --model anthropic/claude-fable-5-1
+PERSONA_API_KEY=persona_sk_... node upload.mjs
 ```
 
 The key is read from the environment only. `PERSONA_API_BASE` defaults to
@@ -27,8 +27,8 @@ by name, so after renaming it in Persona, rename it here too, or the upload make
 Run it again after editing any file: rows are matched by name and updated in place. Add `--chat "היי"` to send one message through the
 agent API and print what F&F said.
 
-Pick the model from `GET /api/models` (any tool-capable gateway id). The persona's default
-is `google/gemini-4-argon`.
+Every persona in the F&F project runs on `google/gemini-4-argon`, and the upload pins that
+model unless you pass `--model <gateway id>` on purpose (ids come from `GET /api/models`).
 
 ## Connect the number
 
