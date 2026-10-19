@@ -51,6 +51,8 @@ export interface HttpApp {
   wallet?: WalletCallback;
   /** Report a finished phone call to the owner. Unset: call.ended events are acknowledged and dropped. */
   onCallEnded?(event: CallEndedEvent): Promise<void>;
+  /** Set when the WhatsApp channel is on (F&F). */
+  whatsapp?: { ownerChatId: string; queueSize(): number };
 }
 
 export interface HttpServerOptions {
@@ -296,6 +298,7 @@ export function statusJson(app: HttpApp, now: number = Date.now()): Record<strin
   };
   if (app.chatBuffer) out.pendingReplies = app.chatBuffer.pendingCounts();
   if (app.wallet) out.payments = { connected: app.wallet.isConnected() };
+  if (app.whatsapp) out.whatsapp = { ownerChat: app.whatsapp.ownerChatId, queued: app.whatsapp.queueSize() };
   return out;
 }
 

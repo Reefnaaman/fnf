@@ -35,6 +35,14 @@ async function main(): Promise<void> {
     server.listen(port, host, () => resolve());
   });
   log(`listening on ${host}:${port}`);
+  if (app.whatsapp) {
+    app.whatsapp.inbox.start();
+    log(`whatsapp: polling owner chat ${app.whatsapp.ownerChatId}`);
+    void app.whatsapp.channel
+      .flushQueue()
+      .then((n) => { if (n > 0) log(`whatsapp: flushed ${n} queued text(s)`); })
+      .catch((err: Error) => log(`whatsapp: flush failed: ${err.message}`));
+  }
   if (host !== "127.0.0.1" && !env.INSTINCT_CHAT_TOKEN) {
     log("warning: /chat is reachable beyond loopback with no INSTINCT_CHAT_TOKEN; rely on this only behind Maritime or a private network");
   }

@@ -330,6 +330,9 @@ importers:
       '@open-instinct/payments':
         specifier: workspace:*
         version: link:../payments
+      '@open-instinct/whatsapp':
+        specifier: workspace:*
+        version: link:../whatsapp
     devDependencies:
       '@types/node':
         specifier: ^22.15.0

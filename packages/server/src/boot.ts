@@ -37,6 +37,7 @@ import { ComposioApps, DEFAULT_TOOLKITS, OPENAI_COMPLETIONS_TOOL_LIMIT, appsGuid
 import { ampleTools, type AmpleCredentials } from "@open-instinct/ample";
 import { AtomicMailBackend, atomicMailGuidance } from "@open-instinct/atomicmail";
 import { contextTools } from "@open-instinct/context";
+import { DaemonRpc, OutboxQueue, WhatsAppChannel, WhatsAppInbox, transcribeAudio, whatsappSettings } from "@open-instinct/whatsapp";
 import { networkTools } from "@open-instinct/network";
 import { ChatAwareOutbox, ConsoleOutbox, type ChatReplyBuffer } from "./console-outbox.js";
 import { fileTools, resolveInsideWorkspace } from "./file-tools.js";
@@ -82,6 +83,16 @@ export interface BootResult {
   hydrateInbound?: (message: InboundMessage) => Promise<InboundMessage>;
   /** Set with Inkbox: text the owner the outcome of a finished phone call. */
   onCallEnded?: (event: CallEndedEvent) => Promise<void>;
+  /** Set when FNF_WHATSAPP_SOCKET and FNF_WHATSAPP_OWNER_CHAT are set and the owner has a phone: the WhatsApp channel and its poller. */
+  whatsapp?: WhatsAppWiring;
+}
+
+export interface WhatsAppWiring {
+  channel: WhatsAppChannel;
+  inbox: WhatsAppInbox;
+  ownerChatId: string;
+  /** Texts waiting for the daemon to come back. */
+  queueSize(): number;
 }
 
 export const DEFAULT_MARITIME_MCP_URL = "https://mcp.maritime.sh";
@@ -134,6 +145,20 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   let channel: InkboxChannel | undefined;
   let outbox: Outbox;
   let chatBuffer: ChatReplyBuffer;
+  // WhatsApp (F&F): the local whatsapp-connector daemon, one owner chat. The socket is the switch;
+  // without the owner chat id or an owner phone it stays off and says so once.
+  const wa = whatsappSettings(env);
+  const waOwnerPhone = config.owner.phones[0];
+  let whatsapp: WhatsAppChannel | undefined;
+  let waRpc: DaemonRpc | undefined;
+  if (wa && !opts.outbox && !inkbox) {
+    if (wa.ownerChatId && waOwnerPhone) {
+      waRpc = new DaemonRpc({ socketPath: wa.socketPath });
+      whatsapp = new WhatsAppChannel({ rpc: waRpc, ownerChatId: wa.ownerChatId, ownerPhone: waOwnerPhone, queue: new OutboxQueue(state.path("whatsapp-outbox.json")), logger: log });
+    } else {
+      log(`whatsapp: FNF_WHATSAPP_SOCKET is set but ${wa.ownerChatId ? "the owner phone" : "FNF_WHATSAPP_OWNER_CHAT"} is missing; WhatsApp disabled`);
+    }
+  }
   if (opts.outbox) {
     if (opts.outbox instanceof InkboxChannel) channel = opts.outbox;
     const wrapped = new ChatAwareOutbox(opts.outbox);
@@ -150,6 +175,11 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     const wrapped = new ChatAwareOutbox(channel);
     outbox = wrapped;
     chatBuffer = wrapped.chat;
+  } else if (whatsapp && wa?.ownerChatId) {
+    const wrapped = new ChatAwareOutbox(whatsapp);
+    outbox = wrapped;
+    chatBuffer = wrapped.chat;
+    log(`whatsapp: on, owner chat ${wa.ownerChatId} via ${wa.socketPath}`);
   } else {
     const console_ = new ConsoleOutbox({ logger: log });
     outbox = console_;
@@ -168,6 +198,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
       audit,
       config,
       outbox,
+      ...(whatsapp ? { ownerPhoneChannel: "whatsapp" as const } : {}),
       workspaceDir: state.path("workspace"),
       onApprovalSettled: (approval, approved) => runtime.afterApproval(approval, approved),
       // Image generation rides on an OpenAI-compatible key: a dedicated IMAGE_API_KEY, else the model key
@@ -410,6 +441,7 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     registry,
     model,
     outbox,
+    ...(whatsapp ? { ownerPhoneChannel: "whatsapp" as const } : {}),
     a2aStore,
     ...(a2a ? { loadA2ATask: (taskId: string) => a2a.getTask(taskId) } : {}),
     skillsPrompt,
@@ -429,6 +461,26 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
   });
 
   const stopScheduler = scheduler.start((entry) => runtime.runScheduled(entry));
+
+  let whatsappWiring: WhatsAppWiring | undefined;
+  if (whatsapp && waRpc && wa?.ownerChatId && waOwnerPhone) {
+    const ownerChatId = wa.ownerChatId;
+    const queue = new OutboxQueue(state.path("whatsapp-outbox.json"));
+    const inbox = new WhatsAppInbox({
+      rpc: waRpc,
+      ownerChatId,
+      ownerPhone: waOwnerPhone,
+      cursorFile: state.path("whatsapp-cursor.json"),
+      inboundDir: state.path("workspace", "inbound"),
+      onMessage: (m: InboundMessage) => runtime.handleInbound(m),
+      logger: log,
+      ...(env.OPENAI_API_KEY
+        ? { transcribe: (path: string, mimetype: string) => transcribeAudio({ path, mimetype, apiKey: env.OPENAI_API_KEY as string, ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}) }) }
+        : {}),
+    });
+    whatsappWiring = { channel: whatsapp, inbox, ownerChatId, queueSize: () => queue.size() };
+    log(`whatsapp: voice notes ${env.OPENAI_API_KEY ? "transcribed (OPENAI_API_KEY)" : "not transcribed (no OPENAI_API_KEY)"}`);
+  }
 
   let sync: ScheduleSync | undefined;
   if (env.MARITIME_BACKEND_URL && env.MARITIME_INTERNAL_TOKEN && env.MARITIME_AGENT_ID) {
@@ -468,8 +520,10 @@ export async function boot(env: NodeJS.ProcessEnv, opts: BootOptions = {}): Prom
     ...(wallet ? { wallet } : {}),
     ...(hydrator ? { hydrateInbound: (message: InboundMessage) => hydrator.hydrate(message) } : {}),
     ...(channel ? { onCallEnded: callReporter(channel, (text, key) => runtime.relayToOwner(text, key), log) } : {}),
+    ...(whatsappWiring ? { whatsapp: whatsappWiring } : {}),
     async close() {
       stopScheduler();
+      whatsappWiring?.inbox.stop();
       sync?.stop();
       await safely(log, "computer close", () => computer?.close());
       await safely(log, "apps close", () => apps?.close());
