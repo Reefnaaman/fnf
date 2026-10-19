@@ -15,7 +15,7 @@ Created during onboarding with `automation_create` (name "Daily brief", cron in 
 
 Skip any source that is not connected; do not mention the gap unless he asked for it before.
 
-1. Weather for his city: a browser task to a weather page is slow; prefer a quick lookup if a weather tool or app is connected, otherwise one short `browser_task` ("today's weather in Tel Aviv, high low and rain chance, text only").
+1. Weather for his city, from the sandbox shell: `curl -s "https://wttr.in/<city>?format=j1"` and read today's max, min, rain chance and the afternoon condition. Never use the browser for weather.
 2. Calendar: today's events through the Google Calendar app. First event time, anything with a location that needs travel, video calls.
 3. Mail: unread since last evening that needs a reply or a decision (skill mail-and-calendar, read step only). Count the rest.
 4. Open loops from memory: things you are waiting on, a delivery, a booking hold, a question he never answered. Repeat an unanswered ask in one line with the same wording.
