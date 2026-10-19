@@ -235,3 +235,14 @@ describe("owner skills folder", () => {
     expect(clash()).toBe(2);
   });
 });
+
+describe("F&F shipped skill set", () => {
+  it("includes fnf-onboarding and whatsapp-etiquette and no maritime skill", () => {
+    const repoSkills = new URL("../../../skills", import.meta.url).pathname;
+    const data = mkdtempSync(join(tmpdir(), "fnf-skills-"));
+    const names = loadAllSkills({ builtinDirs: repoSkills, ownerDir: data }).map((s) => s.name);
+    expect(names).toEqual(expect.arrayContaining(["fnf-onboarding", "whatsapp-etiquette", "onboarding", "daily-brief"]));
+    expect(names.some((n) => n.startsWith("maritime"))).toBe(false);
+    rmSync(data, { recursive: true, force: true });
+  });
+});

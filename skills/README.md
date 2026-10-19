@@ -24,9 +24,9 @@ skills/
   files/SKILL.md
   daily-brief/SKILL.md
   trusted-network/SKILL.md
-  maritime-computer/SKILL.md
-  maritime/SKILL.md
   web-apps/SKILL.md
+  fnf-onboarding/SKILL.md     F&F: first conversation on WhatsApp
+  whatsapp-etiquette/SKILL.md F&F: how to write and read on WhatsApp
 ```
 
 One directory per skill, named like the skill. The file is always `SKILL.md`.
