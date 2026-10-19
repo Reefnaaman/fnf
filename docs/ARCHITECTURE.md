@@ -93,7 +93,7 @@ open-instinct/
     server/    @open-instinct/server    the agent process: /health, /chat, /schedules, webhook intake, Link callback, smoke test
     gateway/   @open-instinct/gateway   multi-user relay + signup: Inkbox webhooks → Maritime agent; connect page with QR
     cli/       @open-instinct/cli       `instinct` command: init, connect, dev, chat, status, deploy, invite, trust, schedules, payments
-  skills/      SKILL.md playbooks the agent loads (onboarding, scheduling, dining, travel, rides, email-triage, research, purchases, files, daily-brief, trusted-network, maritime-computer, web-apps)
+  skills/      SKILL.md playbooks the agent loads (onboarding, scheduling, dining, travel, rides, email-triage, research, purchases, files, daily-brief, trusted-network, web-apps, fnf-onboarding, whatsapp-etiquette)
   examples/    local-chat.mjs, fake-inkbox-webhook.mjs, dinner-a2a.mjs (see examples/README.md)
   deploy/      Dockerfile.agent, Dockerfile.gateway, docker-compose.yml, entrypoint.sh, .env.example
   .github/workflows/build-images.yml   builds and pushes both images to GHCR
