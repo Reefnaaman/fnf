@@ -36,12 +36,12 @@ function fakeApi() {
     if ((m = u.pathname.match(/^\/api\/personas\/([^/]+)$/)) && method === "PATCH") { const per = state.personas.find((x) => x.id === m[1]); Object.assign(per, body); return json(per); }
     if ((m = u.pathname.match(/^\/api\/personas\/([^/]+)\/instructions$/))) {
       if (method === "GET") return json(state.instructions.filter((x) => x.personaId === m[1]));
-      const ins = { id: id("ins"), personaId: m[1], enabled: true, ...body }; state.instructions.push(ins); return json(ins, 201);
+      const ins = { id: id("ins"), personaId: m[1], enabled: true, ...body, content: body.content.trim() }; state.instructions.push(ins); return json(ins, 201);
     }
     if ((m = u.pathname.match(/^\/api\/instructions\/([^/]+)$/)) && method === "PATCH") { const ins = state.instructions.find((x) => x.id === m[1]); Object.assign(ins, body); return json(ins); }
     if ((m = u.pathname.match(/^\/api\/personas\/([^/]+)\/skills$/))) {
       if (method === "GET") return json(state.skills.filter((x) => x.personaId === m[1]).map(({ markdown, ...rest }) => rest));
-      const sk = { id: id("sk"), personaId: m[1], enabled: true, origin: "custom", ...body }; state.skills.push(sk); return json(sk, 201);
+      const sk = { id: id("sk"), personaId: m[1], enabled: true, origin: "custom", ...body, markdown: body.markdown.trim() }; state.skills.push(sk); return json(sk, 201);
     }
     if ((m = u.pathname.match(/^\/api\/skills\/([^/]+)$/))) {
       const sk = state.skills.find((x) => x.id === m[1]);

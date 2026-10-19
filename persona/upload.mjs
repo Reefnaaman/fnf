@@ -56,6 +56,9 @@ export function readProfile(dir) {
   return { instructions, skills };
 }
 
+/** The API stores text trimmed; compare the way it stores. */
+const same = (a, b) => (a ?? "").trim() === (b ?? "").trim();
+
 export async function syncProfile(client, { dir, projectName, personaName, model }) {
   const result = { created: [], updated: [], unchanged: [] };
   const { instructions, skills } = readProfile(dir);
@@ -92,7 +95,7 @@ export async function syncProfile(client, { dir, projectName, personaName, model
     if (!have) {
       await client.request("POST", `/personas/${persona.id}/instructions`, { name: ins.name, content: ins.content, enabled: true });
       result.created.push(`instruction:${ins.name}`);
-    } else if (have.content !== ins.content) {
+    } else if (same(have.content, ins.content) === false) {
       await client.request("PATCH", `/instructions/${have.id}`, { content: ins.content });
       result.updated.push(`instruction:${ins.name}`);
     } else {
@@ -109,7 +112,7 @@ export async function syncProfile(client, { dir, projectName, personaName, model
       continue;
     }
     const full = await client.request("GET", `/skills/${have.id}`);
-    if (full.markdown !== sk.markdown || full.description !== sk.description) {
+    if (!same(full.markdown, sk.markdown) || !same(full.description, sk.description)) {
       await client.request("PATCH", `/skills/${have.id}`, { description: sk.description, markdown: sk.markdown });
       result.updated.push(`skill:${sk.name}`);
     } else {
