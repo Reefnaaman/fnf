@@ -17,9 +17,13 @@ mkdir -p "$DATA/logs" "$DATA/workspace/inbound" "$AGENTS_DIR"
 if [ ! -f "$DATA/PERSONA.md" ]; then cp "$HERE/PERSONA.md" "$DATA/PERSONA.md"; echo "seeded $DATA/PERSONA.md"; fi
 if [ ! -f "$DATA/AGENTS.md" ]; then cp "$HERE/AGENTS.md" "$DATA/AGENTS.md"; echo "seeded $DATA/AGENTS.md"; fi
 
+# sed treats "&", "\\" and the delimiter specially in a replacement; the folder is literally "F&F".
+esc() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
+R_NODE="$(esc "$NODE")"; R_NODE_DIR="$(esc "$NODE_DIR")"; R_REPO="$(esc "$REPO")"; R_DAEMON="$(esc "$DAEMON")"; R_DATA="$(esc "$DATA")"
+
 # .env from the example, paths rendered. Existing file is left alone.
 if [ ! -f "$REPO/.env" ]; then
-  sed -e "s|__REPO__|$REPO|g" "$HERE/env.example" > "$REPO/.env"
+  sed -e "s|__REPO__|$R_REPO|g" "$HERE/env.example" > "$REPO/.env"
   chmod 600 "$REPO/.env"
   echo "wrote $REPO/.env"
 fi
@@ -30,8 +34,11 @@ if grep -qE '^INSTINCT_CHAT_TOKEN=$' "$REPO/.env"; then
   echo "generated INSTINCT_CHAT_TOKEN"
 fi
 
+# Plists are XML: "&" must be "&amp;" inside a <string>. Escape for XML first, then for sed.
+xesc() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+X_NODE="$(esc "$(xesc "$NODE")")"; X_NODE_DIR="$(esc "$(xesc "$NODE_DIR")")"; X_REPO="$(esc "$(xesc "$REPO")")"; X_DAEMON="$(esc "$(xesc "$DAEMON")")"; X_DATA="$(esc "$(xesc "$DATA")")"
 render() {
-  sed -e "s|__NODE_DIR__|$NODE_DIR|g" -e "s|__NODE__|$NODE|g" -e "s|__REPO__|$REPO|g" -e "s|__DAEMON__|$DAEMON|g" -e "s|__DATA__|$DATA|g" "$1" > "$2"
+  sed -e "s|__NODE_DIR__|$X_NODE_DIR|g" -e "s|__NODE__|$X_NODE|g" -e "s|__REPO__|$X_REPO|g" -e "s|__DAEMON__|$X_DAEMON|g" -e "s|__DATA__|$X_DATA|g" "$1" > "$2"
   echo "wrote $2"
 }
 render "$HERE/com.fnf.agent.plist.template" "$AGENTS_DIR/com.fnf.agent.plist"

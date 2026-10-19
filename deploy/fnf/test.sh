@@ -3,7 +3,9 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-WORK="$(mktemp -d)"
+# The real folder is ~/F&F: the "&" must survive every path substitution.
+WORK="$(mktemp -d)/F&F"
+mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
@@ -19,8 +21,13 @@ bash "$WORK/repo/deploy/fnf/setup.sh" > "$WORK/setup1.log" 2>&1 || { cat "$WORK/
 [ -f "$WORK/repo/.env" ] || fail ".env not created"
 grep -qE '^INSTINCT_CHAT_TOKEN=[0-9a-f]{48}$' "$WORK/repo/.env" || fail "INSTINCT_CHAT_TOKEN is not 48 hex chars"
 grep -q '^INSTINCT_OWNER_TIMEZONE=Asia/Jerusalem$' "$WORK/repo/.env" || fail "timezone not Asia/Jerusalem"
-grep -q "^FNF_WHATSAPP_SOCKET=$WORK/repo/daemon/control.sock$" "$WORK/repo/.env" || fail "socket path not rendered"
+grep -qF "FNF_WHATSAPP_SOCKET=\"$WORK/repo/daemon/control.sock\"" "$WORK/repo/.env" || fail "socket path not rendered and quoted (check the & in the path)"
+grep -qF "INSTINCT_DATA_DIR=\"$WORK/repo/.instinct\"" "$WORK/repo/.env" || fail "data dir not rendered and quoted (check the & in the path)"
 ok ".env created with token, timezone and socket path"
+
+# The agent plist sources .env with /bin/sh; every value must survive that, including the "&" in F&F.
+( cd "$WORK/repo" && sh -c 'set -e; set -a; . ./.env; set +a; [ "$INSTINCT_AGENT_NAME" = "F&F" ] && [ -n "$INSTINCT_CHAT_TOKEN" ] && [ "$INSTINCT_DATA_DIR" = "'"$WORK"'/repo/.instinct" ] && [ "$FNF_WHATSAPP_SOCKET" = "'"$WORK"'/repo/daemon/control.sock" ]' 2>/dev/null ) || fail ".env does not source cleanly under /bin/sh (quote values with special characters such as &)"
+ok ".env sources cleanly under sh and keeps the agent name F&F"
 
 cmp -s "$WORK/repo/.instinct/PERSONA.md" "$HERE/PERSONA.md" || fail "PERSONA.md not copied"
 cmp -s "$WORK/repo/.instinct/AGENTS.md" "$HERE/AGENTS.md" || fail "AGENTS.md not copied"
@@ -30,7 +37,7 @@ for label in com.fnf.agent com.fnf.whatsapp-daemon; do
   plist="$HOME/Library/LaunchAgents/$label.plist"
   [ -f "$plist" ] || fail "$plist not written"
   plutil -lint "$plist" > /dev/null || fail "$plist is not valid"
-  grep -q "$WORK/repo" "$plist" || fail "$plist does not point at the repo"
+  grep -qF "${WORK//&/&amp;}/repo" "$plist" || fail "$plist does not point at the repo with the & XML-escaped"
   grep -q "/usr/local/bin/node" "$plist" || fail "$plist does not use FNF_SETUP_NODE"
 done
 ok "both launchd plists rendered and valid"
