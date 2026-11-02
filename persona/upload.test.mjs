@@ -86,6 +86,24 @@ test("first sync creates the project, persona, instructions and skills; second s
   assert.equal(state.instructions.find((i) => i.name === "soul").content, "# Who you are\nYou are F&F, v2.\n");
 });
 
+test("only syncs the named items, leaves the rest of a personalized persona alone, and never creates a persona", async () => {
+  const dir = fixtureDir();
+  const { state, fetchImpl } = fakeApi();
+  const client = makeClient({ base: "https://persona-goldy.vercel.app/api", key: "persona_sk_test", fetchImpl });
+  await syncProfile(client, { dir, projectName: "F&F", personaName: "F&F" });
+  writeFileSync(join(dir, "instructions", "soul.md"), "# Who you are\nYou are F&F, v2.\n");
+  writeFileSync(join(dir, "instructions", "chat_format.md"), "# WhatsApp\nLonger.\n");
+  const out = await syncProfile(client, { dir, projectName: "F&F", personaName: "F&F", only: ["soul"] });
+  assert.deepEqual(out.updated, ["instruction:soul"]);
+  assert.deepEqual(out.unchanged, []);
+  assert.equal(state.instructions.find((i) => i.name === "chat_format").content, "# WhatsApp\nShort.");
+  await assert.rejects(
+    syncProfile(client, { dir, projectName: "F&F", personaName: "Nobody", only: ["soul"] }),
+    /persona "Nobody" not found/,
+  );
+  assert.equal(state.personas.length, 1);
+});
+
 test("a new project's first persona is renamed to the persona name, not left behind as a stray", async () => {
   const dir = fixtureDir();
   const { state, fetchImpl } = fakeApi();
