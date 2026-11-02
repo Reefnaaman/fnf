@@ -4,7 +4,9 @@
  * instructions (one per instructions/*.md, named after the file) and skills (one per
  * skills/<name>/SKILL.md). Idempotent: existing rows are updated in place by name.
  *
- *   PERSONA_API_KEY=persona_sk_... node upload.mjs [--project "F&F"] [--persona "F&F template"] [--model <gateway id>] [--chat "hi"]
+ *   PERSONA_API_KEY=persona_sk_... node upload.mjs [--project "F&F"] [--persona "F&F template"] [--model <gateway id>] [--only name,name] [--chat "hi"]
+ *
+ * --only pushes just the named instructions and skills to an existing persona and leaves the rest alone.
  *
  * Without --model the persona is pinned to google/gemini-4-argon, the model every persona in the F&F project uses.
  *
@@ -71,9 +73,14 @@ export function readProfile(dir) {
 /** The API stores text trimmed; compare the way it stores. */
 const same = (a, b) => (a ?? "").trim() === (b ?? "").trim();
 
-export async function syncProfile(client, { dir, projectName, personaName, model }) {
+export async function syncProfile(client, { dir, projectName, personaName, model, only }) {
   const result = { created: [], updated: [], unchanged: [] };
-  const { instructions, skills } = readProfile(dir);
+  const profile = readProfile(dir);
+  // With only, push just those instructions and skills to a persona that already exists
+  // (a friend's copy shaped by its own chats), leaving everything else on it untouched.
+  const pick = (items) => (only ? items.filter((x) => only.includes(x.name)) : items);
+  const instructions = pick(profile.instructions);
+  const skills = pick(profile.skills);
 
   const projects = await client.request("GET", "/projects");
   let project = projects.find((p) => p.name === projectName);
@@ -94,12 +101,13 @@ export async function syncProfile(client, { dir, projectName, personaName, model
   if (!persona) {
     const personas = await client.request("GET", `/projects/${project.id}/personas`);
     persona = personas.find((p) => p.name === personaName);
+    if (!persona && only) throw new Error(`persona "${personaName}" not found in project "${projectName}"`);
     if (!persona) {
       persona = await client.request("POST", `/projects/${project.id}/personas`, { name: personaName });
       result.created.push(`persona:${personaName}`);
     }
   }
-  if (model && persona.model !== model) {
+  if (model && !only && persona.model !== model) {
     await client.request("PATCH", `/personas/${persona.id}`, { model });
     result.updated.push(`persona:model`);
   }
@@ -194,7 +202,7 @@ function arg(name) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const client = makeClient({ base: process.env.PERSONA_API_BASE ?? DEFAULT_BASE, key: process.env.PERSONA_API_KEY });
   const dir = fileURLToPath(new URL(".", import.meta.url));
-  const out = await syncProfile(client, { dir, projectName: arg("--project") ?? DEFAULT_PROJECT, personaName: arg("--persona") ?? DEFAULT_PERSONA, model: modelArg(process.argv.slice(2)) });
+  const out = await syncProfile(client, { dir, projectName: arg("--project") ?? DEFAULT_PROJECT, personaName: arg("--persona") ?? DEFAULT_PERSONA, model: modelArg(process.argv.slice(2)), only: arg("--only")?.split(",").map((s) => s.trim()).filter(Boolean) });
   console.log(JSON.stringify(out, null, 2));
   const msg = arg("--chat");
   if (msg) {
