@@ -110,6 +110,25 @@ Open questions:
   turn until a mailbox has a trigger. What Persona actually bills is unknown: the credit rate is
   only in the console, and `/api/projects/{id}/usage` answered 404 on 2026-11-04.
 
+## On Extend
+
+The same upload works against Extend: set `PERSONA_API_BASE=https://app.tryextend.co/api` and an
+Extend org key. Tested 2026-11-05 on a test persona: upload idempotent, Hebrew onboarding created
+the five notes and the Memory tidy, Daily brief and Look-ahead automations with the exact values, and
+a brief run read the notes, sent two quiet-day lines with a "Checked" line and wrote `pa:outbox` and
+`pa:proactive-log`.
+
+Two Extend differences:
+- The owner must be linked with a link code, not invited with `join <code>`. Someone who joins
+  through a door is a subscriber: notes, automations and triggers are creator-only tools, so the
+  PA's state and schedules would not exist for them, and their messages count against the daily cap.
+- The PATCH of `model` does not apply (Extend takes a `models` list); an empty list already runs
+  `google/gemini-4-argon`, so the upload's `persona:model` update line is harmless.
+
+Keep one clean template persona that nobody chats with, and run the upload with
+`--persona "<name>"` once per owner instead of duplicating a used one: a duplicate carries the
+automations, paused, and the chat-made automations need the owner's own chat.
+
 ## Connect a number
 
 As in F&F: make a link code on the persona's Channels tab, send `link <code>` from the owner's
