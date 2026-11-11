@@ -15,10 +15,11 @@ Created during onboarding with `automation_create` (name "Daily brief", cron in 
 
 Skip any source that is not connected; do not mention the gap unless he asked for it before.
 
+0. Note "proactive-log" (instruction proactive_rules): if `unanswered` is 5 or more and today is not Sunday, answer with nothing; at 8 or more, always answer with nothing.
 1. Weather for his city, from the sandbox shell: `curl -s "https://wttr.in/<city>?format=j1"` and read today's max, min, rain chance and the afternoon condition. Never use the browser for weather.
 2. Calendar: today's events through the Google Calendar app. First event time, anything with a location that needs travel, video calls.
 3. Mail: unread since last evening that needs a reply or a decision (skill mail-and-calendar, read step only). Count the rest.
-4. Open loops from memory: things you are waiting on, a delivery, a booking hold, a question he never answered. Repeat an unanswered ask in one line with the same wording.
+4. Open loops: the note "open-loops" (skill open-loops), lines whose next check is today or past, re-checked first so closed ones are left out. Add from memory anything else he is waiting on or a question he never answered. Repeat an unanswered ask in one line with the same wording. Do not edit the note from this run.
 5. Automations due today that you created (reminders, check-ins), so he knows you have them.
 
 ## Write
