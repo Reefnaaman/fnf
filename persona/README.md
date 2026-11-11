@@ -8,7 +8,9 @@ Persona API. The number and the WhatsApp line are connected in Persona itself.
 instructions/soul.md          who F&F is, language, voice, how it works, never
 instructions/chat_format.md   WhatsApp bubble rules
 instructions/house_rules.md   quiet hours, money thresholds, contacting others
-skills/<name>/SKILL.md        fnf-onboarding, daily-brief, research, errands, mail-and-calendar, whatsapp-etiquette
+instructions/mail_watch_on_connect.md  sets up the live mail watch once mail is connected
+instructions/proactive_rules.md        one test for every message F&F sends first, daily cap, back-off, catch-up
+skills/<name>/SKILL.md        fnf-onboarding, daily-brief, research, errands, mail-and-calendar, whatsapp-etiquette, mail-watch, open-loops
 upload.mjs                    idempotent sync (project, persona, model, instructions, skills) and a chat smoke test
 upload.test.mjs               node --test upload.test.mjs
 ```

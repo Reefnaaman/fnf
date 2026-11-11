@@ -22,7 +22,7 @@ From the message and memory: what exactly, when, where, budget, who it is for, p
 
 ## Reminders that go with errands
 
-Flight booked: `automation_create` a check-in reminder for 24 hours before departure and a "boarding pass and leave time" text 3 hours before. Table booked: a reminder an hour before with the address. Delivery: a check at the delivery window.
+Flight booked: `automation_create` a check-in reminder for 24 hours before departure and a "boarding pass and leave time" text 3 hours before. Table booked: a reminder an hour before with the address. Delivery: a check at the delivery window. An errand that stops before the end (waiting for his yes, a code, a call back, a confirmation) gets a line in the note "open-loops" (skill open-loops).
 
 ## Voice
 
